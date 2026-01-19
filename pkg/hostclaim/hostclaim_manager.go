@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/cluster-api/util/conditions"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 type HostManager struct {
@@ -67,13 +68,49 @@ const (
 // An error used when there is no BMH satisfying the constraints.
 var ErrNoAvailableBMH = errors.New("no available BareMetalHost")
 
-func NewHostManager(client client.Client, log logr.Logger, claim *metal3api.HostClaim, apireader client.Reader) (*HostManager, error) {
+type HostManagerInterface interface {
+	SetFinalizer()
+	UnsetFinalizer()
+	IsProvisioned() bool
+	IsAssociated() bool
+	SetConditionHostToFalse(string, string, string)
+	SetConditionHostToTrue(string, string)
+	Associate(context.Context) error
+	Delete(context.Context) error
+	Update(context.Context) error
+}
+
+// NewHostManager returns a new helper for managing a hostclaim.
+func NewHostManager(client client.Client, log logr.Logger, claim *metal3api.HostClaim, apireader client.Reader) HostManagerInterface {
 	return &HostManager{
 		client:    client,
 		HostClaim: claim,
 		Log:       log,
 		APIReader: apireader,
-	}, nil
+	}
+}
+
+// SetFinalizer sets finalizer on the hostClaim.
+func (m *HostManager) SetFinalizer() {
+	if !controllerutil.ContainsFinalizer(m.HostClaim, metal3api.HostClaimFinalizer) {
+		controllerutil.AddFinalizer(m.HostClaim, metal3api.HostClaimFinalizer)
+	}
+}
+
+// UnsetFinalizer unsets finalizer on the hostClaim.
+func (m *HostManager) UnsetFinalizer() {
+	controllerutil.RemoveFinalizer(m.HostClaim, metal3api.HostClaimFinalizer)
+}
+
+// IsProvisioned checks if the baremetalhost associated to the hostclaim is provisioned.
+// This is visible in the Ready field of the status.
+func (m *HostManager) IsProvisioned() bool {
+	return conditions.IsTrue(m.HostClaim, metal3api.ProvisionedCondition)
+}
+
+// IsAssociated checks that the host is marked as associated to a BMH.
+func (m *HostManager) IsAssociated() bool {
+	return m.HostClaim.Status.BareMetalHost != nil
 }
 
 // SetConditionHostToFalse sets Host condition status to False.
@@ -154,6 +191,35 @@ func (m *HostManager) Associate(ctx context.Context) error {
 	// From here the hostClaim is definitely associated
 	m.SetConditionHostToTrue(metal3api.AssociatedCondition, metal3api.BareMetalHostAssociatedReason)
 
+	return nil
+}
+
+// Delete removes the link between the HostClaim and the associated BareMetalHost.
+func (m *HostManager) Delete(ctx context.Context) error {
+	// TODO: to be reimplemented later.
+	if m.HostClaim == nil || m.HostClaim.Status.BareMetalHost == nil {
+		return nil
+	}
+	ref := m.HostClaim.Status.BareMetalHost
+	bmh := &metal3api.BareMetalHost{}
+	if err := m.client.Get(ctx, client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}, bmh); err != nil {
+		if k8serrors.IsNotFound(err) {
+			m.HostClaim.Status.BareMetalHost = nil
+			return nil
+		}
+		return err
+	}
+	if bmh.Spec.ConsumerRef != nil && consumerRefMatches(bmh.Spec.ConsumerRef, m.HostClaim) {
+		bmh.Spec.ConsumerRef = nil
+		if err := m.client.Update(ctx, bmh); err != nil {
+			return hideConflictError(err)
+		}
+	}
+	m.HostClaim.Status.BareMetalHost = nil
+	return nil
+}
+
+func (m *HostManager) Update(_ context.Context) error {
 	return nil
 }
 

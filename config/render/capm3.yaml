@@ -3150,6 +3150,8 @@ rules:
   - namespaces
   verbs:
   - get
+  - list
+  - watch
 - apiGroups:
   - ""
   resources:
@@ -3364,6 +3366,7 @@ spec:
       containers:
       - args:
         - --enable-leader-election
+        - --hostclaims
         command:
         - /baremetal-operator
         env:
