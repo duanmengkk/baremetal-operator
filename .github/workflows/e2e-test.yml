@@ -37,6 +37,13 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libvirt-daemon-system qemu-kvm virt-manager libvirt-dev
 
+    - name: Disable containerd image store (Docker 29 workaround)
+      # See: https://github.com/kubernetes-sigs/kind/issues/3795
+      # See: https://github.com/actions/runner-images/issues/13474
+      run: |
+        echo '{"features":{"containerd-snapshotter":false}}' | sudo tee /etc/docker/daemon.json
+        sudo systemctl restart docker
+
     - name: Run BMO e2e Tests
       env:
         BMC_PROTOCOL: ${{ inputs.bmc-protocol }}
