@@ -214,7 +214,7 @@ var _ = Describe("Upgrade", Ordered, Label("optional", "upgrade"), func() {
 	var (
 		upgradeClusterProxy    framework.ClusterProxy
 		upgradeClusterProvider bootstrap.ClusterProvider
-		entries                []TableEntry
+		entries                = make([]TableEntry, 0, len(e2eConfig.BMOIronicUpgradeSpecs))
 		namespace              *corev1.Namespace
 		cancelWatches          context.CancelFunc
 		testArtifactFolder     string
