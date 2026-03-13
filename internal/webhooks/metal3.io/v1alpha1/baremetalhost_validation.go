@@ -90,6 +90,12 @@ func (webhook *BareMetalHost) validateHost(host *metal3api.BareMetalHost) []erro
 		errs = append(errs, err)
 	}
 
+	if len(host.Spec.NetworkInterfaces) > 0 {
+		if ifaceErrors := validateNetworkInterfaces(host.Spec.NetworkInterfaces); ifaceErrors != nil {
+			errs = append(errs, ifaceErrors...)
+		}
+	}
+
 	return errs
 }
 
@@ -445,4 +451,32 @@ func validatePowerStatus(host *metal3api.BareMetalHost) error {
 		return errors.New("node can't simultaneously have online set to false and have power off disabled")
 	}
 	return nil
+}
+
+// validateNetworkInterfaces validates NetworkInterface specifications.
+func validateNetworkInterfaces(networkInterfaces []metal3api.NetworkInterface) []error {
+	var errs []error
+	seen := make(map[string]bool, len(networkInterfaces))
+
+	for i, iface := range networkInterfaces {
+		// At least one identifier (Name or MACAddress) must be specified
+		if !iface.IsValid() {
+			errs = append(errs, fmt.Errorf("networkInterfaces[%d]: must specify either name or macAddress", i))
+			continue
+		}
+
+		// Name and MACAddress are mutually exclusive
+		if iface.Name != "" && iface.MACAddress != "" {
+			errs = append(errs, fmt.Errorf("networkInterfaces[%d]: name and macAddress are mutually exclusive", i))
+			continue
+		}
+
+		key := strings.ToLower(iface.GetKey())
+		if seen[key] {
+			errs = append(errs, fmt.Errorf("networkInterfaces[%d]: duplicate interface selector for %q", i, iface.GetKey()))
+		}
+		seen[key] = true
+	}
+
+	return errs
 }
