@@ -23,11 +23,12 @@ const DefaultTimeout = 30 * time.Second
 // When specifying Certificate and Private key, TLS connection will use
 // client certificate authentication.
 type TLSConfig struct {
-	TrustedCAFile         string
-	ClientCertificateFile string
-	ClientPrivateKeyFile  string
-	InsecureSkipVerify    bool
-	SkipClientSANVerify   bool
+	TrustedCAFile            string
+	TrustedCAFileIsTemporary bool
+	ClientCertificateFile    string
+	ClientPrivateKeyFile     string
+	InsecureSkipVerify       bool
+	SkipClientSANVerify      bool
 }
 
 func updateHTTPClient(client *gophercloud.ServiceClient, tlsConf TLSConfig, timeout time.Duration) error {
