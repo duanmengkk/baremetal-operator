@@ -204,4 +204,7 @@ const (
 
 	// LogFieldStatusConditionStatus is the status of a condition.
 	LogFieldStatusConditionStatus = "conditionStatus"
+
+	// LogFieldDifference is a difference between some values.
+	LogFieldDifference = "difference"
 )

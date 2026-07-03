@@ -36,6 +36,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -200,6 +201,12 @@ func (r *HostFirmwareSettingsReconciler) updateHostFirmwareSettings(ctx context.
 	return nil
 }
 
+type hfsDiff struct {
+	Name   string
+	Spec   string
+	Status *string
+}
+
 // Update the HostFirmwareSettings resource using the settings and schema from provisioner.
 func (r *HostFirmwareSettingsReconciler) updateStatus(ctx context.Context, info *rInfo, settings metal3api.SettingsMap, schema *metal3api.FirmwareSchema) (err error) {
 	dirty := false
@@ -225,20 +232,23 @@ func (r *HostFirmwareSettingsReconciler) updateStatus(ctx context.Context, info 
 		!reflect.DeepEqual(info.hfs.Status.Settings, newStatus.Settings)
 
 	// Check if any Spec settings are different than Status
-	specMismatch := false
+	var specMismatch []hfsDiff
 	for k, v := range info.hfs.Spec.Settings {
+		specVal := v.String()
 		if statusVal, ok := newStatus.Settings[k]; ok {
-			if v.String() != statusVal {
-				info.log.Info("spec value different than status",
-					"name", k,
-					"specValue", v.String(),
-					"statusValue", statusVal)
-				specMismatch = true
-				break
+			if specVal != statusVal {
+				specMismatch = append(specMismatch, hfsDiff{
+					Name:   k,
+					Spec:   specVal,
+					Status: ptr.To(statusVal),
+				})
 			}
 		} else {
 			// Spec setting is not in Status, this will be handled by validateHostFirmwareSettings
-			specMismatch = true
+			specMismatch = append(specMismatch, hfsDiff{
+				Name: k,
+				Spec: specVal,
+			})
 			break
 		}
 	}
@@ -247,8 +257,16 @@ func (r *HostFirmwareSettingsReconciler) updateStatus(ctx context.Context, info 
 	reason := reasonSuccess
 	generation := info.hfs.GetGeneration()
 
-	if specMismatch {
+	if len(specMismatch) > 0 {
 		if setCondition(generation, &newStatus, info, metal3api.FirmwareSettingsChangeDetected, metav1.ConditionTrue, reason, "") {
+			// This is the first time we detect a change, log the diff
+			diffParts := make([]string, 0, len(specMismatch))
+			for _, part := range specMismatch {
+				diffParts = append(diffParts,
+					fmt.Sprintf("%s: %q != %q", part.Name, part.Spec, ptr.Deref(part.Status, "<nil>")))
+			}
+			info.log.Info("current HostFirmwareSettings do not match the requested settings",
+				LogFieldDifference, strings.Join(diffParts, ", "))
 			dirty = true
 		}
 
@@ -276,6 +294,7 @@ func (r *HostFirmwareSettingsReconciler) updateStatus(ctx context.Context, info 
 			dirty = true
 		}
 		if setCondition(generation, &newStatus, info, metal3api.FirmwareSettingsChangeDetected, metav1.ConditionFalse, reason, "") {
+			info.log.Info("current HostFirmwareSettings match the requested (or no changes are requested)")
 			dirty = true
 		}
 	}
