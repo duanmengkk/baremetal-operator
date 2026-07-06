@@ -5,6 +5,7 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"path"
@@ -106,6 +107,7 @@ var _ = Describe("Preprovisioning Network Data", Label("required", "pp-network-d
 				},
 				BootMode:                       metal3api.BootMode(e2eConfig.GetVariable("BOOT_MODE")),
 				BootMACAddress:                 bmc.BootMacAddress,
+				Online:                         true,
 				PreprovisioningNetworkDataName: networkDataSecretName,
 			},
 		}
@@ -134,6 +136,50 @@ var _ = Describe("Preprovisioning Network Data", Label("required", "pp-network-d
 		Expect(hwData.Spec.HardwareDetails.NIC).To(
 			ContainElement(HaveField("IP", staticIP)),
 			"Expected a NIC with the preprovisioned static IP "+staticIP)
+
+		By("Provisioning the BMH with NetworkData defaulting to PreprovisioningNetworkData")
+		var userDataSecret *corev1.SecretReference
+		if e2eConfig.GetVariable("SSH_CHECK_PROVISIONED") == "true" {
+			userDataSecretName := "user-data"
+			sshPubKeyPath := e2eConfig.GetVariable("SSH_PUB_KEY")
+			createSSHSetupUserdata(ctx, clusterProxy.GetClient(), namespace.Name, userDataSecretName, sshPubKeyPath, bmc.IPAddress)
+			userDataSecret = &corev1.SecretReference{
+				Name:      userDataSecretName,
+				Namespace: namespace.Name,
+			}
+		}
+		Expect(PatchBMHForProvisioning(ctx, PatchBMHForProvisioningInput{
+			client:         clusterProxy.GetClient(),
+			bmh:            &bmh,
+			bmc:            bmc,
+			e2eConfig:      e2eConfig,
+			namespace:      namespace.Name,
+			userDataSecret: userDataSecret,
+		})).To(Succeed())
+
+		By("Waiting for the BMH to be provisioned")
+		WaitForBmhInProvisioningState(ctx, WaitForBmhInProvisioningStateInput{
+			Client: clusterProxy.GetClient(),
+			Bmh:    bmh,
+			State:  metal3api.StateProvisioned,
+		}, e2eConfig.GetIntervals(specName, "wait-provisioned")...)
+
+		if e2eConfig.GetVariable("SSH_CHECK_PROVISIONED") == "true" {
+			By("Verifying the network data file on the config drive")
+			sshClient := EstablishSSHConnection(e2eConfig, bmc.IPAddress)
+			defer sshClient.Close()
+
+			command := "mkdir -p /mnt/cdtest && mount /dev/disk/by-label/config-2 /mnt/cdtest && cat /mnt/cdtest/openstack/latest/network_data.json"
+			output, err := executeSSHCommand(sshClient, fmt.Sprintf("sh -c '%s'", command))
+			Expect(err).NotTo(HaveOccurred(), "Failed to read network_data.json from the config drive")
+
+			var parsed map[string]interface{}
+			Expect(json.Unmarshal([]byte(output), &parsed)).To(Succeed(), "network_data.json is not valid JSON")
+			Expect(output).To(ContainSubstring(strings.ToUpper(bmc.BootMacAddress)))
+			Expect(output).To(ContainSubstring(staticIP))
+		} else {
+			Logf("WARNING: Skipping SSH check since SSH_CHECK_PROVISIONED != true")
+		}
 	})
 
 	AfterEach(func() {
