@@ -40,7 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-type HostManager struct {
+type Manager struct {
 	client    client.Client
 	HostClaim *metal3api.HostClaim
 	Log       logr.Logger
@@ -68,7 +68,7 @@ const (
 // An error used when there is no BMH satisfying the constraints.
 var ErrNoAvailableBMH = errors.New("no available BareMetalHost")
 
-type HostManagerInterface interface {
+type ManagerInterface interface {
 	SetFinalizer()
 	UnsetFinalizer()
 	IsProvisioned() bool
@@ -80,9 +80,9 @@ type HostManagerInterface interface {
 	Update(context.Context) error
 }
 
-// NewHostManager returns a new helper for managing a hostclaim.
-func NewHostManager(client client.Client, log logr.Logger, claim *metal3api.HostClaim, apireader client.Reader) HostManagerInterface {
-	return &HostManager{
+// NewManager returns a new helper for managing a hostclaim.
+func NewManager(client client.Client, log logr.Logger, claim *metal3api.HostClaim, apireader client.Reader) ManagerInterface {
+	return &Manager{
 		client:    client,
 		HostClaim: claim,
 		Log:       log,
@@ -91,30 +91,30 @@ func NewHostManager(client client.Client, log logr.Logger, claim *metal3api.Host
 }
 
 // SetFinalizer sets finalizer on the hostClaim.
-func (m *HostManager) SetFinalizer() {
+func (m *Manager) SetFinalizer() {
 	if !controllerutil.ContainsFinalizer(m.HostClaim, metal3api.HostClaimFinalizer) {
 		controllerutil.AddFinalizer(m.HostClaim, metal3api.HostClaimFinalizer)
 	}
 }
 
 // UnsetFinalizer unsets finalizer on the hostClaim.
-func (m *HostManager) UnsetFinalizer() {
+func (m *Manager) UnsetFinalizer() {
 	controllerutil.RemoveFinalizer(m.HostClaim, metal3api.HostClaimFinalizer)
 }
 
 // IsProvisioned checks if the baremetalhost associated to the hostclaim is provisioned.
 // This is visible in the Ready field of the status.
-func (m *HostManager) IsProvisioned() bool {
+func (m *Manager) IsProvisioned() bool {
 	return conditions.IsTrue(m.HostClaim, metal3api.ProvisionedCondition)
 }
 
 // IsAssociated checks that the host is marked as associated to a BMH.
-func (m *HostManager) IsAssociated() bool {
+func (m *Manager) IsAssociated() bool {
 	return m.HostClaim.Status.BareMetalHost != nil
 }
 
 // SetConditionHostToFalse sets Host condition status to False.
-func (m *HostManager) SetConditionHostToFalse(
+func (m *Manager) SetConditionHostToFalse(
 	t string,
 	reason string,
 	message string,
@@ -123,7 +123,7 @@ func (m *HostManager) SetConditionHostToFalse(
 }
 
 // SetConditionHostToFalse sets Host condition status to False.
-func (m *HostManager) SetConditionHostToTrue(
+func (m *Manager) SetConditionHostToTrue(
 	t string,
 	reason string,
 ) {
@@ -137,7 +137,7 @@ func (m *HostManager) SetConditionHostToTrue(
 // If a suitable host is found, update its consumer ref, to ensure it is booked. If an error
 // prevents the update of the status of the claim at the end of the reconciliation logic, the choice logic will
 // ensure that the BareMetalHost already marked is chosen.
-func (m *HostManager) Associate(ctx context.Context) error {
+func (m *Manager) Associate(ctx context.Context) error {
 	m.Log.Info("Associating host")
 
 	// load and validate the config
@@ -195,7 +195,7 @@ func (m *HostManager) Associate(ctx context.Context) error {
 }
 
 // Delete removes the link between the HostClaim and the associated BareMetalHost.
-func (m *HostManager) Delete(ctx context.Context) error {
+func (m *Manager) Delete(ctx context.Context) error {
 	// TODO: to be reimplemented later.
 	if m.HostClaim == nil || m.HostClaim.Status.BareMetalHost == nil {
 		return nil
@@ -219,7 +219,7 @@ func (m *HostManager) Delete(ctx context.Context) error {
 	return nil
 }
 
-func (m *HostManager) Update(_ context.Context) error {
+func (m *Manager) Update(_ context.Context) error {
 	return nil
 }
 
@@ -254,7 +254,7 @@ func consumerRefMatches(consumer *corev1.ObjectReference, claim *metal3api.HostC
 	return true
 }
 
-func (m *HostManager) selectBMH(
+func (m *Manager) selectBMH(
 	availableHosts []*metal3api.BareMetalHost,
 ) (*metal3api.BareMetalHost, error) {
 	// choose a host.
@@ -273,7 +273,7 @@ func (m *HostManager) selectBMH(
 
 // Picks host from list of available hosts, if failureDomain is set, tries to choose from hosts in failureDomain.
 // When none available in failureDomain it chooses from all available hosts.
-func (m *HostManager) pickHost(availableHosts []*metal3api.BareMetalHost) (*metal3api.BareMetalHost, error) {
+func (m *Manager) pickHost(availableHosts []*metal3api.BareMetalHost) (*metal3api.BareMetalHost, error) {
 	var chosenHost *metal3api.BareMetalHost
 	var availableHostsInFailureDomain []*metal3api.BareMetalHost
 
@@ -321,7 +321,7 @@ func (m *HostManager) pickHost(availableHosts []*metal3api.BareMetalHost) (*meta
 // match the namespace of the claim. If the namespace argument is not empty,
 // HostDeployPolicies are only listed in that namespace and the result is either
 // an empty set or a singleton containing that namespace.
-func (m *HostManager) acceptableNamespaces(ctx context.Context, namespace string) (Set[string], error) {
+func (m *Manager) acceptableNamespaces(ctx context.Context, namespace string) (Set[string], error) {
 	m.Log.V(1).Info("Searching for suitable namespaces")
 	hostdeploypolicies := metal3api.HostDeployPolicyList{}
 	options := []client.ListOption{}
@@ -397,7 +397,7 @@ LOOP_POLICY:
 	return namespaces, nil
 }
 
-func (m *HostManager) hostLabelSelectorForHostClaim() (labels.Selector, error) {
+func (m *Manager) hostLabelSelectorForHostClaim() (labels.Selector, error) {
 	labelSelector := labels.NewSelector()
 
 	for labelKey, labelVal := range m.HostClaim.Spec.HostSelector.MatchLabels {
@@ -424,7 +424,7 @@ func (m *HostManager) hostLabelSelectorForHostClaim() (labels.Selector, error) {
 // chooseBMH iterates through known bare-metal hosts and returns one that can be
 // associated with the HostClaim. It searches all hosts in case one already has an
 // association with this HostClaim.
-func (m *HostManager) chooseBMH(ctx context.Context) (*metal3api.BareMetalHost, error) {
+func (m *Manager) chooseBMH(ctx context.Context) (*metal3api.BareMetalHost, error) {
 	namespaces, err := m.acceptableNamespaces(ctx, m.HostClaim.Spec.HostSelector.InNamespace)
 	if err != nil {
 		return nil, err

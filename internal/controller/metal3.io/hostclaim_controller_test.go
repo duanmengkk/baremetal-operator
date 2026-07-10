@@ -160,8 +160,8 @@ var _ = Describe("Test HostClaim Controller",
 				req := ctrl.Request{NamespacedName: namespacedName}
 				hostclaimCtrl := HostClaimReconciler{
 					Client: fakeClient, Scheme: scheme, Log: GinkgoLogr, APIReader: fakeClient,
-					NewHostManager: func(_ client.Client, _ logr.Logger, _ *metal3api.HostClaim, _ client.Reader,
-					) hostclaim.HostManagerInterface {
+					NewHostClaimManager: func(_ client.Client, _ logr.Logger, _ *metal3api.HostClaim, _ client.Reader,
+					) hostclaim.ManagerInterface {
 						return tc.HostManager
 					}}
 				result, err := hostclaimCtrl.Reconcile(ctx, req)

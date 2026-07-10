@@ -109,7 +109,7 @@ var _ = Describe("HostClaim manager", func() {
 				}
 			}
 			fakeClient := fake.NewClientBuilder().WithScheme(setupScheme()).WithObjects(objects...).Build()
-			hostMgr, ok := NewHostManager(fakeClient, GinkgoLogr, tc.HostClaim, fakeClient).(*HostManager)
+			hostMgr, ok := NewManager(fakeClient, GinkgoLogr, tc.HostClaim, fakeClient).(*Manager)
 			Expect(ok).To(BeTrue())
 			bmh, err := hostMgr.chooseBMH(context.TODO())
 			if tc.ExpectedBmhName == "" {
@@ -321,7 +321,7 @@ var _ = Describe("HostClaim manager", func() {
 			}
 			// We patch the status during associate to set the annotation.
 			fakeClient := fake.NewClientBuilder().WithScheme(setupScheme()).WithObjects(objects...).WithStatusSubresource(tc.HostClaim).Build()
-			hostMgr := NewHostManager(fakeClient, GinkgoLogr, tc.HostClaim, fakeClient)
+			hostMgr := NewManager(fakeClient, GinkgoLogr, tc.HostClaim, fakeClient)
 			err := hostMgr.Associate(context.TODO())
 			if tc.ExpectFails {
 				Expect(err).To(HaveOccurred())

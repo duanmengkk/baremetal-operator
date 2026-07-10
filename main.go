@@ -417,11 +417,11 @@ func main() {
 
 	if hostClaimsEnable {
 		if err = (&metal3iocontroller.HostClaimReconciler{
-			Client:         mgr.GetClient(),
-			Log:            ctrl.Log.WithName("controllers").WithName("HostClaim"),
-			Scheme:         mgr.GetScheme(),
-			APIReader:      mgr.GetAPIReader(),
-			NewHostManager: hostclaim.NewHostManager,
+			Client:              mgr.GetClient(),
+			Log:                 ctrl.Log.WithName("controllers").WithName("HostClaim"),
+			Scheme:              mgr.GetScheme(),
+			APIReader:           mgr.GetAPIReader(),
+			NewHostClaimManager: hostclaim.NewManager,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "HostClaim")
 			os.Exit(1)

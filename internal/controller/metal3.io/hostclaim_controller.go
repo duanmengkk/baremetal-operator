@@ -37,10 +37,10 @@ import (
 // HostClaimReconciler reconciles a HostClaim object.
 type HostClaimReconciler struct {
 	client.Client
-	Scheme         *runtime.Scheme
-	Log            logr.Logger
-	APIReader      client.Reader
-	NewHostManager func(client client.Client, log logr.Logger, claim *metal3api.HostClaim, apireader client.Reader) hostclaimManager.HostManagerInterface
+	Scheme              *runtime.Scheme
+	Log                 logr.Logger
+	APIReader           client.Reader
+	NewHostClaimManager func(client client.Client, log logr.Logger, claim *metal3api.HostClaim, apireader client.Reader) hostclaimManager.ManagerInterface
 }
 
 //+kubebuilder:rbac:groups=metal3.io,resources=hostclaims,verbs=get;list;watch;create;update;patch;delete
@@ -73,39 +73,39 @@ func (r *HostClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}()
 
 	// Create a helper for managing the baremetal container hosting the machine.
-	hostMgr := r.NewHostManager(r.Client, log, hostClaim, r.APIReader)
+	hostClaimMgr := r.NewHostClaimManager(r.Client, log, hostClaim, r.APIReader)
 
 	// Handle deleted machines
 	if !hostClaim.ObjectMeta.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(ctx, hostMgr)
+		return r.reconcileDelete(ctx, hostClaimMgr)
 	}
 
 	// Handle non-deleted machines
-	return r.reconcileNormal(ctx, hostMgr)
+	return r.reconcileNormal(ctx, hostClaimMgr)
 }
 
 func (r *HostClaimReconciler) reconcileNormal(ctx context.Context,
-	hostMgr hostclaimManager.HostManagerInterface,
+	hostClaimMgr hostclaimManager.ManagerInterface,
 ) (ctrl.Result, error) {
 	// If the HostClaim doesn't have finalizer, add it.
-	hostMgr.SetFinalizer()
+	hostClaimMgr.SetFinalizer()
 
 	// if the machine is already provisioned, update and return
-	if hostMgr.IsProvisioned() {
-		return checkHostClaimError(hostMgr.Update(ctx), "Failed to update the HostClaim")
+	if hostClaimMgr.IsProvisioned() {
+		return checkHostClaimError(hostClaimMgr.Update(ctx), "Failed to update the HostClaim")
 	}
 
 	// Check if the hostclaim was associated with a baremetalhost
-	if !hostMgr.IsAssociated() {
-		err := hostMgr.Associate(ctx)
+	if !hostClaimMgr.IsAssociated() {
+		err := hostClaimMgr.Associate(ctx)
 		if err != nil {
 			return checkHostClaimError(err, "failed to associate the HostClaim to a BaremetalHost")
 		}
 	} else {
 		// Update Condition to reflect that we have an associated BMH
-		hostMgr.SetConditionHostToTrue(metal3api.AssociatedCondition, metal3api.BareMetalHostAssociatedReason)
+		hostClaimMgr.SetConditionHostToTrue(metal3api.AssociatedCondition, metal3api.BareMetalHostAssociatedReason)
 	}
-	err := hostMgr.Update(ctx)
+	err := hostClaimMgr.Update(ctx)
 	if err != nil {
 		return checkHostClaimError(err, "failed to update BaremetalHost")
 	}
@@ -113,15 +113,15 @@ func (r *HostClaimReconciler) reconcileNormal(ctx context.Context,
 }
 
 func (r *HostClaimReconciler) reconcileDelete(ctx context.Context,
-	hostMgr hostclaimManager.HostManagerInterface,
+	hostClaimMgr hostclaimManager.ManagerInterface,
 ) (ctrl.Result, error) {
-	hostMgr.SetConditionHostToFalse(metal3api.AssociatedCondition,
+	hostClaimMgr.SetConditionHostToFalse(metal3api.AssociatedCondition,
 		metal3api.HostClaimDeletingReason,
 		"")
 
 	// delete the hostclaim
-	if err := hostMgr.Delete(ctx); err != nil {
-		hostMgr.SetConditionHostToFalse(metal3api.AssociatedCondition,
+	if err := hostClaimMgr.Delete(ctx); err != nil {
+		hostClaimMgr.SetConditionHostToFalse(metal3api.AssociatedCondition,
 			metal3api.HostClaimDeletionFailedReason,
 			err.Error())
 		return checkHostClaimError(err, "failed to delete Host")
@@ -129,7 +129,7 @@ func (r *HostClaimReconciler) reconcileDelete(ctx context.Context,
 
 	// hostclaim is marked for deletion and ready to be deleted,
 	// so remove the finalizer.
-	hostMgr.UnsetFinalizer()
+	hostClaimMgr.UnsetFinalizer()
 
 	return ctrl.Result{}, nil
 }
