@@ -22,9 +22,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ = Describe("Preprovisioning Network Data", Label("required", "pp-network-data"), func() {
+var _ = Describe("Network Data", Label("required", "network-data"), func() {
 	var (
-		specName      = "pp-network-data"
+		specName      = "network-data"
 		namespace     *corev1.Namespace
 		cancelWatches context.CancelFunc
 		toCleanup     []client.Object
@@ -36,10 +36,10 @@ var _ = Describe("Preprovisioning Network Data", Label("required", "pp-network-d
 		accessDetails, err := metal3bmc.NewAccessDetails(bmc.Address, false)
 		Expect(err).NotTo(HaveOccurred())
 		if !accessDetails.SupportsISOPreprovisioningImage() {
-			Skip("BMC does not support virtual media, required for preprovisioning network data. BMC address: " + bmc.Address)
+			Skip("BMC does not support virtual media, required for network data test. BMC address: " + bmc.Address)
 		}
 		if !e2eConfig.GetBoolVariable("DEPLOY_IRONIC") {
-			Skip("Preprovisioning network data test requires a real Ironic deployment")
+			Skip("Network data test requires a real Ironic deployment")
 		}
 
 		namespace, cancelWatches = framework.CreateNamespaceAndWatchEvents(ctx, framework.CreateNamespaceAndWatchEventsInput{
@@ -51,8 +51,8 @@ var _ = Describe("Preprovisioning Network Data", Label("required", "pp-network-d
 		})
 	})
 
-	It("should apply preprovisioning network data during inspection", func() {
-		bmhName := specName
+	It("should apply preprovisioning network data during inspection and provisioning", func() {
+		bmhName := specName + "-pp"
 		secretName := bmhName + "-bmc"
 		networkDataSecretName := bmhName + "-network-data"
 
@@ -84,7 +84,7 @@ var _ = Describe("Preprovisioning Network Data", Label("required", "pp-network-d
       "type": "ipv4",
       "ip_address": "%s",
       "netmask": "255.255.255.0",
-      "network_id": "test-pp-network"
+      "network_id": "test-network"
     }
   ],
   "services": []
@@ -128,16 +128,16 @@ var _ = Describe("Preprovisioning Network Data", Label("required", "pp-network-d
 			State:  metal3api.StateAvailable,
 		}, e2eConfig.GetIntervals(specName, "wait-available")...)
 
-		By("Verifying that HardwareData contains a NIC with the preprovisioned static IP")
+		By("Verifying that HardwareData contains a NIC with the static IP from network data")
 		hwData := metal3api.HardwareData{}
 		key := types.NamespacedName{Namespace: namespace.Name, Name: bmhName}
 		Expect(clusterProxy.GetClient().Get(ctx, key, &hwData)).To(Succeed())
 		Expect(hwData.Spec.HardwareDetails).NotTo(BeNil())
 		Expect(hwData.Spec.HardwareDetails.NIC).To(
 			ContainElement(HaveField("IP", staticIP)),
-			"Expected a NIC with the preprovisioned static IP "+staticIP)
+			"Expected a NIC with the static IP from network data: "+staticIP)
 
-		By("Provisioning the BMH with NetworkData defaulting to PreprovisioningNetworkData")
+		By("Provisioning the BMH to verify network data defaults to preprovisioning network data")
 		var userDataSecret *corev1.SecretReference
 		if e2eConfig.GetVariable("SSH_CHECK_PROVISIONED") == "true" {
 			userDataSecretName := "user-data"
