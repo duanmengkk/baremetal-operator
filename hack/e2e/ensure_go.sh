@@ -2,7 +2,7 @@
 
 set -eu
 
-MINIMUM_GO_VERSION=go1.25.11
+MINIMUM_GO_VERSION=go1.25.12
 
 # Verify mode turned off by default
 VERIFY_ONLY="${VERIFY_ONLY:-false}"
