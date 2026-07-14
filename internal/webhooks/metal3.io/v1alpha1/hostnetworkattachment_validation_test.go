@@ -54,7 +54,7 @@ func TestValidateAttachment(t *testing.T) {
 				Spec: metal3api.HostNetworkAttachmentSpec{
 					Mode:         metal3api.SwitchportModeTrunk,
 					NativeVLAN:   1,
-					AllowedVLANs: []int{10, 20, 30},
+					AllowedVLANs: []string{"10", "20", "30"},
 				},
 			},
 			expectedError: false,
@@ -65,7 +65,7 @@ func TestValidateAttachment(t *testing.T) {
 				Spec: metal3api.HostNetworkAttachmentSpec{
 					Mode:         metal3api.SwitchportModeHybrid,
 					NativeVLAN:   100,
-					AllowedVLANs: []int{200, 300},
+					AllowedVLANs: []string{"200", "300"},
 				},
 			},
 			expectedError: false,
@@ -87,14 +87,118 @@ func TestValidateAttachment(t *testing.T) {
 				Spec: metal3api.HostNetworkAttachmentSpec{
 					Mode:         metal3api.SwitchportModeAccess,
 					NativeVLAN:   100,
-					AllowedVLANs: []int{200},
+					AllowedVLANs: []string{"200"},
 				},
 			},
 			expectedError: true,
 			errorContains: "allowedVLANs cannot be specified for access mode",
 		},
-		// VLAN range (min/max) and mode enum validation are now handled by
-		// CRD schema markers and tested at the API server admission level.
+		{
+			name: "valid-vlan-range",
+			attachment: &metal3api.HostNetworkAttachment{
+				Spec: metal3api.HostNetworkAttachmentSpec{
+					Mode:         metal3api.SwitchportModeTrunk,
+					NativeVLAN:   1,
+					AllowedVLANs: []string{"10", "20-30", "100", "200-400"},
+				},
+			},
+			expectedError: false,
+		},
+		{
+			name: "valid-boundary-vlans",
+			attachment: &metal3api.HostNetworkAttachment{
+				Spec: metal3api.HostNetworkAttachmentSpec{
+					Mode:         metal3api.SwitchportModeTrunk,
+					NativeVLAN:   1,
+					AllowedVLANs: []string{"1", "4094", "1-4094"},
+				},
+			},
+			expectedError: false,
+		},
+		{
+			name: "invalid-vlan-zero",
+			attachment: &metal3api.HostNetworkAttachment{
+				Spec: metal3api.HostNetworkAttachmentSpec{
+					Mode:         metal3api.SwitchportModeTrunk,
+					NativeVLAN:   1,
+					AllowedVLANs: []string{"0"},
+				},
+			},
+			expectedError: true,
+			errorContains: "out of range 1-4094",
+		},
+		{
+			name: "invalid-vlan-above-max",
+			attachment: &metal3api.HostNetworkAttachment{
+				Spec: metal3api.HostNetworkAttachmentSpec{
+					Mode:         metal3api.SwitchportModeTrunk,
+					NativeVLAN:   1,
+					AllowedVLANs: []string{"4095"},
+				},
+			},
+			expectedError: true,
+			errorContains: "out of range 1-4094",
+		},
+		{
+			name: "invalid-range-end-above-max",
+			attachment: &metal3api.HostNetworkAttachment{
+				Spec: metal3api.HostNetworkAttachmentSpec{
+					Mode:         metal3api.SwitchportModeTrunk,
+					NativeVLAN:   1,
+					AllowedVLANs: []string{"1-5000"},
+				},
+			},
+			expectedError: true,
+			errorContains: "out of range 1-4094",
+		},
+		{
+			name: "invalid-reversed-range",
+			attachment: &metal3api.HostNetworkAttachment{
+				Spec: metal3api.HostNetworkAttachmentSpec{
+					Mode:         metal3api.SwitchportModeTrunk,
+					NativeVLAN:   1,
+					AllowedVLANs: []string{"200-100"},
+				},
+			},
+			expectedError: true,
+			errorContains: "must be less than end",
+		},
+		{
+			name: "invalid-degenerate-range",
+			attachment: &metal3api.HostNetworkAttachment{
+				Spec: metal3api.HostNetworkAttachmentSpec{
+					Mode:         metal3api.SwitchportModeTrunk,
+					NativeVLAN:   1,
+					AllowedVLANs: []string{"100-100"},
+				},
+			},
+			expectedError: true,
+			errorContains: "must be less than end",
+		},
+		{
+			name: "invalid-non-numeric",
+			attachment: &metal3api.HostNetworkAttachment{
+				Spec: metal3api.HostNetworkAttachmentSpec{
+					Mode:         metal3api.SwitchportModeTrunk,
+					NativeVLAN:   1,
+					AllowedVLANs: []string{"abc"},
+				},
+			},
+			expectedError: true,
+			errorContains: "invalid VLAN ID",
+		},
+		{
+			name: "invalid-range-non-numeric-end",
+			attachment: &metal3api.HostNetworkAttachment{
+				Spec: metal3api.HostNetworkAttachmentSpec{
+					Mode:         metal3api.SwitchportModeTrunk,
+					NativeVLAN:   1,
+					AllowedVLANs: []string{"10-abc"},
+				},
+			},
+			expectedError: true,
+			errorContains: "invalid range end",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -288,7 +392,7 @@ func TestHNAValidateUpdate(t *testing.T) {
 		Spec: metal3api.HostNetworkAttachmentSpec{
 			Mode:         metal3api.SwitchportModeAccess,
 			NativeVLAN:   100,
-			AllowedVLANs: []int{200}, // Invalid: access mode cannot have allowedVLANs
+			AllowedVLANs: []string{"200"}, // Invalid: access mode cannot have allowedVLANs
 		},
 	}
 

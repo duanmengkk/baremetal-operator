@@ -57,12 +57,12 @@ spec:
             properties:
               allowedVLANs:
                 description: |-
-                  AllowedVLANs specifies a list of VLAN IDs that are allowed on this network attachment.
+                  AllowedVLANs specifies the VLAN IDs allowed on this network attachment.
+                  Each entry is either a single VLAN ID (e.g., "100") or a range (e.g., "100-200").
                   This is typically used in trunk or hybrid mode to specify which tagged VLANs can be carried on the interface.
                 items:
-                  maximum: 4094
-                  minimum: 1
-                  type: integer
+                  pattern: ^\d+(-\d+)?$
+                  type: string
                 type: array
               mode:
                 default: access

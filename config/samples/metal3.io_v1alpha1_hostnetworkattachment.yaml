@@ -20,5 +20,5 @@ metadata:
 spec:
   mode: trunk
   nativeVLAN: 200
-  allowedVLANs: [200, 201, 202, 203]
+  allowedVLANs: ["200-203"]
   mtu: 9000

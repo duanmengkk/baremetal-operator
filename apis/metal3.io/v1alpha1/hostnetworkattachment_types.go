@@ -58,12 +58,12 @@ type HostNetworkAttachmentSpec struct {
 	// +kubebuilder:validation:Maximum=4094
 	NativeVLAN int `json:"nativeVLAN"`
 
-	// AllowedVLANs specifies a list of VLAN IDs that are allowed on this network attachment.
+	// AllowedVLANs specifies the VLAN IDs allowed on this network attachment.
+	// Each entry is either a single VLAN ID (e.g., "100") or a range (e.g., "100-200").
 	// This is typically used in trunk or hybrid mode to specify which tagged VLANs can be carried on the interface.
 	// +optional
-	// +kubebuilder:validation:items:Minimum=1
-	// +kubebuilder:validation:items:Maximum=4094
-	AllowedVLANs []int `json:"allowedVLANs,omitempty"`
+	// +kubebuilder:validation:items:Pattern=`^\d+(-\d+)?$`
+	AllowedVLANs []string `json:"allowedVLANs,omitempty"`
 
 	// MTU specifies the Maximum Transmission Unit size for the network attachment.
 	// If not specified, the default MTU for the underlying network will be used.

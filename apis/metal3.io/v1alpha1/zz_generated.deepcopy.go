@@ -1532,7 +1532,7 @@ func (in *HostNetworkAttachmentSpec) DeepCopyInto(out *HostNetworkAttachmentSpec
 	*out = *in
 	if in.AllowedVLANs != nil {
 		in, out := &in.AllowedVLANs, &out.AllowedVLANs
-		*out = make([]int, len(*in))
+		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
 	if in.MTU != nil {
