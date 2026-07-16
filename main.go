@@ -59,9 +59,20 @@ const (
 )
 
 type TLSOptions struct {
-	TLSMaxVersion   string
-	TLSMinVersion   string
-	TLSCipherSuites string
+	TLSMaxVersion       string
+	TLSMinVersion       string
+	TLSCipherSuites     string
+	TLSCurvePreferences string
+}
+
+// Supported TLS Curves mapping for go1.25, make sure to update it
+// when go version is updated.
+var supportedTLSCurvesPreferences = map[string]tls.CurveID{
+	"X25519":         tls.X25519,
+	"CurveP256":      tls.CurveP256,
+	"CurveP384":      tls.CurveP384,
+	"CurveP521":      tls.CurveP521,
+	"X25519MLKEM768": tls.X25519MLKEM768,
 }
 
 var (
@@ -156,6 +167,10 @@ func main() {
 	var leaseDurationSeconds string
 	var renewDeadlineSeconds string
 	var retryPeriodSeconds string
+	var supportedTLSCurvesNames = make([]string, 0, len(supportedTLSCurvesPreferences))
+	for name := range supportedTLSCurvesPreferences {
+		supportedTLSCurvesNames = append(supportedTLSCurvesNames, name)
+	}
 
 	// From CAPI point of view, BMO should be able to watch all namespaces
 	// in case of a deployment that is not multi-tenant. If the deployment
@@ -199,6 +214,10 @@ func main() {
 			"If omitted, the default Go cipher suites will be used. \n"+
 			"Preferred values: "+strings.Join(tlsCipherPreferredValues, ", ")+". \n"+
 			"Insecure values: "+strings.Join(tlsCipherInsecureValues, ", ")+".")
+	flag.StringVar(&tlsOptions.TLSCurvePreferences, "tls-curve-preferences", "",
+		"Comma-separated list of curve/group preferences for the webhook and metrics servers. "+
+			"If omitted, the default Go curve preferences will be used. "+
+			"Possible values: "+strings.Join(supportedTLSCurvesNames, ", ")+".")
 	flag.IntVar(&controllerConcurrency, "controller-concurrency", 0,
 		"Number of CRs of each type to process simultaneously")
 
@@ -564,6 +583,22 @@ func GetTLSOptionOverrideFuncs(options TLSOptions) ([]func(*tls.Config), error) 
 		}
 		tlsOptions = append(tlsOptions, func(cfg *tls.Config) {
 			cfg.CipherSuites = suites
+		})
+	}
+
+	if options.TLSCurvePreferences != "" {
+		curveNames := strings.Split(options.TLSCurvePreferences, ",")
+		curves := make([]tls.CurveID, 0, len(curveNames))
+		for _, name := range curveNames {
+			name = strings.TrimSpace(name)
+			curveID, exists := supportedTLSCurvesPreferences[name]
+			if !exists {
+				return nil, fmt.Errorf("unrecognized TLS curve preference %q", name)
+			}
+			curves = append(curves, curveID)
+		}
+		tlsOptions = append(tlsOptions, func(cfg *tls.Config) {
+			cfg.CurvePreferences = curves
 		})
 	}
 
