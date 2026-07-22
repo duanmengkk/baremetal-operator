@@ -77,6 +77,9 @@ Could be used with:
 export GINKGO_FOCUS="basic should control power"
 ```
 
+A special tag `ironic` can be used to run all tests that exercise the Ironic
+provisioner (as opposed to only BMO itself).
+
 Additionally, if you wish to run multiple different tests, just maually
 add another `--focus=` with string to the root Makefile's `test-e2e`
 target.
