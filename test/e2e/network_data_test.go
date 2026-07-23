@@ -71,7 +71,7 @@ func getNewIPAddress() string {
 	return ip.String()
 }
 
-var _ = Describe("Network Data", Label("required", "network-data"), func() {
+var _ = Describe("Network Data", Label("required", "network-data", "ironic"), func() {
 	var (
 		specName      = "network-data"
 		namespace     *corev1.Namespace
